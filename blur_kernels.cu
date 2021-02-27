@@ -1,8 +1,8 @@
 #include "./gaussian_kernel.h" 
 
 
-#define BLOCK 32
-#define TILE_WIDTH BLOCK
+#define BLOCK 16
+#define TILE_WIDTH BLOCK + 8
 
 /*
 The actual gaussian blur kernel to be implemented by 
@@ -16,8 +16,8 @@ void gaussianBlur_shared(unsigned char *d_in, unsigned char *d_out,
         const int rows, const int cols, float *d_filter, const int filterWidth){
   
   //shared memory array
-  __shared__ unsigned char local_pixels[TILE_WIDTH + (filterWidth/2)*2][TILE_WIDTH + (filterWidth/2)*2];
-  __shared__ float local_filter[filterWidth][filterWidth];
+  __shared__ unsigned char local_pixels[TILE_WIDTH][TILE_WIDTH];
+  __shared__ float local_filter[9][9];
   
   // Global Image id
   int px = blockIdx.x * blockDim.x + threadIdx.x;
@@ -30,19 +30,24 @@ void gaussianBlur_shared(unsigned char *d_in, unsigned char *d_out,
   
   // loading image into shared memory using the 1st thread.
   if(threadIdx.x == 0 && threadIdx.y == 0) {
-    for (int i=0; i < TILE_WIDTH + (filterWidth/2)*2; i++){
-        for (int j=0; j < TILE_WIDTH + (filterWidth/2)*2; j++){
+    for (int i=0; i < TILE_WIDTH; i++){
+        for (int j=0; j < TILE_WIDTH; j++){
             if ((py + i - (filterWidth/2)) < rows && (py + i - (filterWidth/2)) > -1 && (px + j - (filterWidth/2)) < cols && (px + j - (filterWidth/2)) > -1){
-                local_pixels[i][j] = d_in[(py + i - (filterWidth/2)) * numCols + (px + j - (filterWidth/2))];
+                local_pixels[i][j] = d_in[(py + i - (filterWidth/2)) * cols + (px + j - (filterWidth/2))];
             }
         }
     }
-    // Loading the filter in the shared memory using the 1st thread.
-    for (int i=0; i < filterWidth; i++){
-        for (int j=0; j < filterWidth; j++){
-            local_filter[i][j] = d_filter[i][j];
-        }
-    }
+  }
+
+
+  // Loading the filter in the shared memory.
+  if(local_i<numCols && local_j<numRows) {
+    local_pixels[local_j][local_i] = d_in[global_row*numCols + global_col];
+
+
+  // Loading the filter in the shared memory.
+  if (threadIdx.x < filterWidth && threadIdx.y < filterWidth){
+    local_filter[threadIdx.x][threadIdx.y] = d_filter[threadIdx.x * filterWidth + threadIdx.y];
   }
 
   __syncthreads();
@@ -64,17 +69,6 @@ void gaussianBlur_shared(unsigned char *d_in, unsigned char *d_out,
     d_out[py * cols + px] = (unsigned char) pixval;
   }
 } 
-
-
-
-
-
-
-
-
-
-
-
 
 
 
