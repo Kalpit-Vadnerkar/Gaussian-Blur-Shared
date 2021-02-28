@@ -1,8 +1,8 @@
 #include "./gaussian_kernel.h" 
 
+#define TILE_WIDTH 24 
+#define BLOCK TILE_WIDTH + 8
 
-#define BLOCK 16
-#define TILE_WIDTH BLOCK + 8
 
 /*
 The actual gaussian blur kernel to be implemented by 
@@ -16,62 +16,65 @@ void gaussianBlur_shared(unsigned char *d_in, unsigned char *d_out,
         const int rows, const int cols, float *d_filter, const int filterWidth){
   
   //shared memory array
-  __shared__ unsigned char local_pixels[TILE_WIDTH][TILE_WIDTH];
+  __shared__ unsigned char local_pixels[BLOCK][BLOCK];
   __shared__ float local_filter[9][9];
   
-  // Global Image id
-  int px = blockIdx.x * blockDim.x + threadIdx.x;
-  int py = blockIdx.y * blockDim.y + threadIdx.y;
+  // id
+  int px = blockIdx.x * TILE_WIDTH + threadIdx.x;
+  int py = blockIdx.y * TILE_WIDTH + threadIdx.y;
   
-  // Shared Data id
-  int local_x = threadIdx.x + (filterWidth/2);
-  int local_y = threadIdx.y + (filterWidth/2);
+  // Shared Image id
+  int local_x = threadIdx.x;
+  int local_y = threadIdx.y;
 
+  // Global Image id
+  int global_x = px - filterWidth/2;
+  int global_y = py - filterWidth/2;
   
   // loading image into shared memory using the 1st thread.
-  if(threadIdx.x == 0 && threadIdx.y == 0) {
-    for (int i=0; i < TILE_WIDTH; i++){
-        for (int j=0; j < TILE_WIDTH; j++){
-            if ((py + i - (filterWidth/2)) < rows && (py + i - (filterWidth/2)) > -1 && (px + j - (filterWidth/2)) < cols && (px + j - (filterWidth/2)) > -1){
-                local_pixels[i][j] = d_in[(py + i - (filterWidth/2)) * cols + (px + j - (filterWidth/2))];
-            }
-        }
-    }
+  //if(threadIdx.x == 0 && threadIdx.y == 0) {
+    //for (int i=0; i < TILE_WIDTH; i++){
+      //  for (int j=0; j < TILE_WIDTH; j++){
+        //    if ((py + i - (filterWidth/2)) < rows && (py + i - (filterWidth/2)) > -1 && (px + j - (filterWidth/2)) < cols && (px + j - (filterWidth/2)) > -1){
+          //      local_pixels[i][j] = d_in[(py + i - (filterWidth/2)) * cols + (px + j - (filterWidth/2))];
+            //}
+        //}
+    //}
+  //}
+
+
+  // Loading the image BLOCK in the shared memory.
+
+  if (global_x > -1 && global_x < cols && global_y > -1 && global_y < rows){
+    local_pixels[local_y][local_x] = d_in[global_y * cols + global_x];  
   }
-
-
-  // Loading the filter in the shared memory.
-  if(local_i<numCols && local_j<numRows) {
-    local_pixels[local_j][local_i] = d_in[global_row*numCols + global_col];
-
+  else
+    local_pixels[local_y][local_x] = 0;
+  
 
   // Loading the filter in the shared memory.
+  
   if (threadIdx.x < filterWidth && threadIdx.y < filterWidth){
-    local_filter[threadIdx.x][threadIdx.y] = d_filter[threadIdx.x * filterWidth + threadIdx.y];
+    local_filter[threadIdx.y][threadIdx.x] = d_filter[threadIdx.y * filterWidth + threadIdx.x];
   }
 
   __syncthreads();
 
-  if (px < cols && py < rows) {
+  if (local_x < TILE_WIDTH && local_y < TILE_WIDTH && px < cols && py < rows) {
     float pixval = 0.0;
     for(int blurRow = -(filterWidth / 2); blurRow < (filterWidth / 2) + 1; ++blurRow) {
         for(int blurCol = -(filterWidth / 2); blurCol < (filterWidth / 2) + 1; ++blurCol) {        
-            int curRow = py + blurRow;
-            int curCol = px + blurCol;
-            if(curRow > -1 && curRow < rows && curCol > -1 && curCol < cols) {
-                pixval += ((float) local_pixels[local_y + blurRow][local_x + blurCol] * local_filter[(blurRow + (filterWidth/2))][(blurCol + filterWidth/2)]);
-                //pixval += ((float) d_in[curRow * cols + curCol] * d_filter[(blurRow + (filterWidth/2)) * filterWidth + (blurCol + filterWidth/2)]);
-            }
+            int curRow = local_y + blurRow + filterWidth / 2;
+            int curCol = local_x + blurCol + filterWidth / 2;
+            pixval += (float) local_pixels[curRow][curCol] * local_filter[(blurRow + (filterWidth/2))][(blurCol + filterWidth/2)];
+            //pixval += ((float) d_in[curRow * cols + curCol] * d_filter[(blurRow + (filterWidth/2)) * filterWidth + (blurCol + filterWidth/2)]);
         }
     }
-
     __syncthreads();
     d_out[py * cols + px] = (unsigned char) pixval;
+    //d_out[py * cols + px] = (unsigned char) local_pixels[local_y][local_x];
   }
 } 
-
-
-
 
 
 __global__ 
@@ -148,7 +151,7 @@ void your_gauss_blur(uchar4* d_imrgba, uchar4 *d_oimrgba, size_t rows, size_t co
 
 
         dim3 blockSize(BLOCK, BLOCK, 1);
-        dim3 gridSize((cols-1)/BLOCK + 1, (rows-1)/BLOCK + 1, 1);
+        dim3 gridSize((cols-1)/TILE_WIDTH + 1, (rows-1)/TILE_WIDTH + 1, 1);
 
         separateChannels<<<gridSize, blockSize>>>(d_imrgba, d_red, d_green, d_blue, rows, cols);
         cudaDeviceSynchronize();
