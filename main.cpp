@@ -122,7 +122,10 @@ int main(int argc, char const *argv[]) {
 
     unsigned char *h_red, *h_blue, *h_green; 
     unsigned char *d_red, *d_blue, *d_green;   
-    unsigned char *d_red_blurred, *d_green_blurred, *d_blue_blurred;   
+    unsigned char *d_red_blurred, *d_green_blurred, *d_blue_blurred; 
+    
+    // Seperable kernels temporary array
+    unsigned char *d_temp;  
 
     float *h_filter, *d_filter;  
     cv::Mat imrgba, o_img, r_img; 
@@ -186,6 +189,9 @@ int main(int argc, char const *argv[]) {
     checkCudaErrors(cudaMalloc((void**)&d_blue_blurred, sizeof(unsigned char) * numPixels));
     checkCudaErrors(cudaMalloc((void**)&d_o_img, sizeof(uchar4) * numPixels));
     checkCudaErrors(cudaMalloc((void**)&d_filter, sizeof(float) * fWidth * fWidth));
+    
+    //temporary array for separable kernel.
+    checkCudaErrors(cudaMalloc((void**)&d_temp, sizeof(unsigned char) * numPixels * fWidth));
 
     // filter allocation 
     h_filter = new float[fWidth*fWidth];
@@ -199,7 +205,7 @@ int main(int argc, char const *argv[]) {
 
     // kernel launch code 
     your_gauss_blur(d_in_img, d_o_img, img.rows, img.cols, d_red, d_green, d_blue, 
-            d_red_blurred, d_green_blurred, d_blue_blurred, d_filter, fWidth);
+            d_red_blurred, d_green_blurred, d_blue_blurred, d_filter, fWidth, d_temp);
 
 
     // memcpy the output image to the host side.
