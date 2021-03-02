@@ -2,14 +2,12 @@
 
 
 // Global memory block size
-#define BLOCK 16
+#define BLOCK 4
 
 // Shared memory tile size
 #define TILE_WIDTH 8
 //#define BLOCK TILE_WIDTH + 8
 
-// Separable kernels block size
-//#define BLOCKCOL 16
 
 /*
 The actual gaussian blur kernel to be implemented by 
