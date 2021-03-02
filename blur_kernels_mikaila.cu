@@ -104,13 +104,23 @@ void gaussianBlur_shared(unsigned char *d_in, unsigned char *d_out,
 	__syncthreads();
 } 
 
+
+
+
 __global__ 
 void gaussianBlur_row(unsigned char *d_in, unsigned char *d_out, 
         const int rows, const int cols, float *d_filter, const int filterWidth)
 {
   int c = blockIdx.x * blockDim.x + threadIdx.x;
   int r = blockIdx.y * blockDim.y + threadIdx.y;
-
+  int leftCol = filterWidth/2;
+  /*
+  float rowsum = 0.0;
+  for(int i = 0; i < filterWidth; i++)
+  {
+    rowsum += d_filter[leftCol*filterWidth+i];
+  }
+*/
   if(c < cols && r < rows)
   {
     float pixelVal = 0.0f;
@@ -121,13 +131,15 @@ void gaussianBlur_row(unsigned char *d_in, unsigned char *d_out,
         
         if(curCol > -1 && curCol < cols)
         {
-          pixelVal += (float)d_filter[(r-blurRow)*filterWidth + curCol] * (float)d_in[r * cols + curCol];
+         // printf("filter index: %d\n", blurRow*filterWidth+leftCol);
+          //printf("d_in index: %d\n", r*cols+curCol);
+          pixelVal += (float)d_filter[blurRow * filterWidth + leftCol] * (float)d_in[r * cols + curCol];
         }
 
       __syncthreads();
     }
     
-    d_out[r * cols + c] = (unsigned char)pixelVal;
+    d_out[r * cols + c] = pixelVal;
   }
 
   __syncthreads();
@@ -141,6 +153,14 @@ void gaussianBlur_col(unsigned char *d_in, unsigned char *d_out,
   int c = blockIdx.x * blockDim.x + threadIdx.x;
   int r = blockIdx.y * blockDim.y + threadIdx.y;
 
+  int topRow = filterWidth/2;
+  /*
+  float rowsum = 0.0;
+  for(int i = 0; i < filterWidth; i++)
+  {
+    rowsum += d_filter[i*filterWidth+topRow];
+  }*/
+
   if(c < cols && r < rows)
   {
     float pixelVal = 0.0f;
@@ -151,12 +171,13 @@ void gaussianBlur_col(unsigned char *d_in, unsigned char *d_out,
         
         if(curRow > -1 && curRow < rows)
         {
-          pixelVal += (float)d_filter[c-blurCol] * (float)d_in[curRow * cols + c];
+          //printf("filter index: %d\n", topRow*filterWidth+blurCol);
+          //printf("d_in index: %d\n", curRow*cols+c);
+          pixelVal += ((float)d_filter[topRow * filterWidth + blurCol]) * (float)d_in[curRow * cols + c];
         }
 
       __syncthreads();
     }
-    
     d_out[r * cols + c] = (unsigned char)pixelVal;
   }
 
