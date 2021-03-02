@@ -72,6 +72,35 @@ void gaussian_blur_filter(float *arr, const int f_sz, const float f_sigma=0.2){
     }
 }
 
+void normalize_gaussian_blur_filter(float *arr, const int f_sz, const float f_sigma=0.2){ 
+    float row[9];
+    float col[9];
+    float rowSum = 0;
+    float colSum = 0;
+    
+    for (int i=0; i < f_sz; i++){
+        row[i] = arr[(f_sz/2) * f_sz + i];
+        col[i] = arr[i * f_sz + (f_sz/2)];
+        rowSum += arr[(f_sz/2) * f_sz + i];
+        colSum += arr[i * f_sz + (f_sz/2)];
+    }
+    
+    for(int i=0; i < f_sz; i++){
+      row[i] /= rowSum;
+      col[i] /= colSum;
+    }
+    
+    for (int i=0; i < f_sz; i++){
+        arr[(f_sz/2) * f_sz + i] = row[i];
+        arr[i * f_sz + (f_sz/2)] = col[i];
+    }
+}
+
+
+
+
+
+
 
 // Serial implementations of kernel functions
 void serialGaussianBlur(unsigned char *in, unsigned char *out, const int rows, const int cols, 
@@ -191,11 +220,15 @@ int main(int argc, char const *argv[]) {
     checkCudaErrors(cudaMalloc((void**)&d_filter, sizeof(float) * fWidth * fWidth));
     
     //temporary array for separable kernel.
-    checkCudaErrors(cudaMalloc((void**)&d_temp, sizeof(unsigned char) * numPixels * fWidth));
+    checkCudaErrors(cudaMalloc((void**)&d_temp, sizeof(unsigned char) * numPixels));
 
     // filter allocation 
     h_filter = new float[fWidth*fWidth];
-    gaussian_blur_filter(h_filter, fWidth, fDev); // create a filter of 9x9 with std_dev = 0.2  
+    gaussian_blur_filter(h_filter, fWidth, fDev); // create a filter of 9x9 with std_dev = 0.2
+    
+    // Normalize Row and Col of filter for separable kernel
+    normalize_gaussian_blur_filter(h_filter, fWidth, fDev);
+      
 
     printArray<float>(h_filter, 81); // printUtility.
 
